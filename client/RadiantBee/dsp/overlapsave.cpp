@@ -1,3 +1,31 @@
+//==========================================================================================
+// + + +   This Software is released under the "Simplified BSD License"  + + +
+// Copyright 2014-2017 F4GKR Sylvain AZARIAN . All rights reserved.
+//
+//Redistribution and use in source and binary forms, with or without modification, are
+//permitted provided that the following conditions are met:
+//
+//   1. Redistributions of source code must retain the above copyright notice, this list of
+//	  conditions and the following disclaimer.
+//
+//   2. Redistributions in binary form must reproduce the above copyright notice, this list
+//	  of conditions and the following disclaimer in the documentation and/or other materials
+//	  provided with the distribution.
+//
+//THIS SOFTWARE IS PROVIDED BY Sylvain AZARIAN F4GKR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+//WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+//FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL Sylvain AZARIAN OR
+//CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+//CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+//ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+//NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+//ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//The views and conclusions contained in the software and documentation are those of the
+//authors and should not be interpreted as representing official policies, either expressed
+//or implied, of Sylvain AZARIAN F4GKR.
+//==========================================================================================
 #include <QDebug>
 #include <stdlib.h>
 #include <stdio.h>
@@ -5,7 +33,7 @@
 #include "overlapsave.h"
 
 #define DEBUG_MATLAB 0
-#define OLAS_DEBUG (0)
+#define OLAS_DEBUG (1)
 #define INPLACE (1)
 
  int OverlapSave::FILTER_KERNEL_SIZE = 3200 ;
@@ -45,11 +73,7 @@ OverlapSave::OverlapSave(int inSampleRate, int outSampleRate, QObject *parent) :
     plan_rev = NULL ;
     fft_size = 0 ;
     fftin = NULL ;
-    /*
-    fftout = NULL ;
-    fft_conv = NULL ;
-    fft_filtered = NULL ;
-    */
+
     _H = NULL ;
     _H0 = NULL ;
     datas_in = NULL ;
@@ -155,9 +179,9 @@ OverlapSave::~OverlapSave() {
         fftwf_destroy_plan( plan_rev );
     }
     if( datas_in != NULL )
-        cpxfree(datas_in);
+        free(datas_in);
     if( datas_in != NULL )
-        cpxfree(datas_out);
+        free(datas_out);
 }
 
 void OverlapSave::configure( int maxInSize , int use_fft_size ) {
@@ -230,16 +254,16 @@ void OverlapSave::configure( int maxInSize , int use_fft_size ) {
     }
 
     if( datas_in != NULL )
-        cpxfree(datas_in);
+        free(datas_in);
     if( datas_in != NULL )
-        cpxfree(datas_out);
+        free(datas_out);
 
-    datas_in = (TYPECPX*)cpxalloc( data_size );
+    datas_in = (TYPECPX*)malloc( data_size * sizeof(TYPECPX));
     if( datas_in == NULL ) {
         qDebug() << "OverlapSave::configure() Critical error : cannot malloc datas_in "  ;
         return ;
     }
-    datas_out = (TYPECPX*)cpxalloc( data_size );
+    datas_out = (TYPECPX*)malloc( data_size * sizeof(TYPECPX));
     if( datas_out == NULL ) {
         qDebug() << "OverlapSave::configure() Critical error : cannot malloc datas_out"  ;
         return ;
@@ -268,10 +292,7 @@ int OverlapSave::put( TYPECPX *insamples, int length ) {
     memcpy( (void *)ptw, (void *)insamples, length * sizeof(TYPECPX));
     wr_pos = end ;
     buff_len = wr_pos - rd_pos ;
-    //printf("pushed %d samples\n", length );
-
     if( buff_len < fft_size ) {
-        //printf("push more samples\n" );
         return(NEED_MORE_DATA);
     }
     //qDebug() << "OverlapSave::put() apply_postmixer=" << apply_postmixer ;

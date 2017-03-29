@@ -34,10 +34,10 @@
 #include <QThread>
 #include <QTimer>
 
-#ifndef _WINDOWS
+#ifndef WIN32
 #include <gps.h>
 #else
-#include "accessories/windows/rs232.h"
+#include "windows/rs232.h"
 #endif
 
 #define ERROR_NO_GPSD (-1)
@@ -47,7 +47,11 @@ class GPSD : public QThread
     Q_OBJECT
 
 public:
-    explicit GPSD(QObject *parent = 0);
+    static GPSD& getInstance()  {
+        static GPSD instance;
+        return instance;
+    }
+
     ~GPSD() ;
     void shutdown();
     void run();
@@ -56,7 +60,7 @@ public:
 signals:
 
     void hasError( int code );
-    void hasGpsFix( float latitude, float longitude );
+    void hasGpsFix( double latitude, double longitude , double altitude );
     void hasGpsTime( int year, int month, int day,
                      int hour, int min, int sec, int msec );
 private slots:
@@ -70,6 +74,10 @@ private:
     void startLocalTimer();
     bool log_NMEA ;
     QString nmea_fileName ;
+
+    GPSD(QObject *parent = 0);
+    GPSD(const GPSD &); // hide copy constructor
+    GPSD& operator=(const GPSD &);
 };
 
 #endif // GPDSD_H

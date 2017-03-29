@@ -1,6 +1,6 @@
 //==========================================================================================
 // + + +   This Software is released under the "Simplified BSD License"  + + +
-// Copyright 2014 F4GKR Sylvain AZARIAN . All rights reserved.
+// Copyright 2014-2017 F4GKR Sylvain AZARIAN . All rights reserved.
 //
 //Redistribution and use in source and binary forms, with or without modification, are
 //permitted provided that the following conditions are met:

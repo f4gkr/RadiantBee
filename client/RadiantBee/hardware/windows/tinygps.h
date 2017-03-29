@@ -65,8 +65,8 @@ public:
   void get_datetime(unsigned long *date, unsigned long *time, unsigned long *age = 0);
 
   // signed altitude in centimeters (from GPGGA sentence)
-  inline long altitude() { return _altitude; }
-  inline float getAltitude() { return _altitude/100.0f ; }
+  long altitude() { return _altitude; }
+  float getAltitude() { return _altitude/100.0f ; }
 
   // course in last full GPRMC sentence in 100th of a degree
   inline unsigned long course() { return _course; }

@@ -1,3 +1,31 @@
+//==========================================================================================
+// + + +   This Software is released under the "Simplified BSD License"  + + +
+// Copyright 2014-2017 F4GKR Sylvain AZARIAN . All rights reserved.
+//
+//Redistribution and use in source and binary forms, with or without modification, are
+//permitted provided that the following conditions are met:
+//
+//   1. Redistributions of source code must retain the above copyright notice, this list of
+//	  conditions and the following disclaimer.
+//
+//   2. Redistributions in binary form must reproduce the above copyright notice, this list
+//	  of conditions and the following disclaimer in the documentation and/or other materials
+//	  provided with the distribution.
+//
+//THIS SOFTWARE IS PROVIDED BY Sylvain AZARIAN F4GKR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+//WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+//FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL Sylvain AZARIAN OR
+//CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+//CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+//ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+//NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+//ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//The views and conclusions contained in the software and documentation are those of the
+//authors and should not be interpreted as representing official policies, either expressed
+//or implied, of Sylvain AZARIAN F4GKR.
+//==========================================================================================
 #include "spectrumplot.h"
 #include "qwt/qwt_plot.h"
 #include "qwt/qwt_math.h"
@@ -9,7 +37,7 @@
 #include "qwt/qwt_legend.h"
 #include "qwt/qwt_text.h"
 #include "qwt/qwt_picker_machine.h"
-#include "loadable_hardware/common/datatypes.h"
+#include "common/datatypes.h"
 
 #define PI (3.14159265358979323846)
 #define SPECTRUM_FFT_SIZE (2048)
@@ -23,8 +51,8 @@ SpectrumPlot::SpectrumPlot(QWidget *parent, bool withGrid) :
     setAutoFillBackground( true );
     s_center_frequency = 0 ;
     s_bw = 1e6 ;
-    min_scale = -120 ;
-    max_scale = -70 ;
+    min_scale = -90 ;
+    max_scale = -40 ;
     show_maxhold = true ;
     show_peak = true ;
 
@@ -259,7 +287,7 @@ void SpectrumPlot::setPowerTab(qint64 center_frequency, double *power_dB, int le
 
 
          if( spectrum[i] > max_hold[i]) {
-             max_hold[i] = (6*max_hold[i] + 4*spectrum[i])/10.0;
+             max_hold[i] = (9*max_hold[i] + spectrum[i])/10.0;
          } else {
              if( max_hold[i] > -200 ) {
                  max_hold[i] -= 1 ;
@@ -267,8 +295,7 @@ void SpectrumPlot::setPowerTab(qint64 center_frequency, double *power_dB, int le
          }
      }
 
-
-     if( pow_min < -120.0 ) pow_min = -120.0 ;
+     if( pow_min < min_scale ) pow_min = min_scale ;
      semspectrum->release(1);
      setAutoReplot( false );
      setAxisScale( QwtPlot::xBottom, (center_frequency - bw/2)/1e6 , (center_frequency + bw/2)/1e6);
@@ -277,16 +304,10 @@ void SpectrumPlot::setPowerTab(qint64 center_frequency, double *power_dB, int le
      if( show_peak )
          showPeak( pos_max, pow_max);
 
-
-
      curve->setSamples( frequencies, spectrum, length );
      if( show_maxhold ) {
          curve_maxhold->setSamples( frequencies, max_hold, length );
-     }
-
-     if( pow_min < min_scale ) {
-          setMinMaxScales( pow_min, max_scale ) ;
-     }
+     }   
      if( pow_max > max_scale ) {
          setMinMaxScales( pow_min, pow_max ) ;
      }

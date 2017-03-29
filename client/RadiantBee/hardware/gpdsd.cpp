@@ -1,6 +1,6 @@
 //==========================================================================================
 // + + +   This Software is released under the "Simplified BSD License"  + + +
-// Copyright 2014 F4GKR Sylvain AZARIAN . All rights reserved.
+// Copyright 2014-2017 F4GKR Sylvain AZARIAN . All rights reserved.
 //
 //Redistribution and use in source and binary forms, with or without modification, are
 //permitted provided that the following conditions are met:
@@ -38,11 +38,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common/QLogger.h"
-#include "core/globaldata.h"
-#include "geo/geotools.h"
-#ifdef _WINDOWS
-#include "accessories/windows/rs232.h"
-#include "accessories/windows/tinygps.h"
+#ifdef WIN32
+#include "windows/rs232.h"
+#include "windows/tinygps.h"
+#include "common/constants.h"
 
 #define BUFLEN (1024)
 #endif
@@ -62,19 +61,13 @@ GPSD::GPSD( QObject *parent) :
     timer = NULL ;
     log_NMEA = false ;
 
-    // init gps with saved station location
-    SGGeod myloc = GeoTools::getInstance().getStationLocation() ;
-
-    GlobalRFData& gd = GlobalRFData::getInstance();
-    gd.gps_latitude = myloc.getLatitudeDeg()  ;
-    gd.gps_longitude = myloc.getLongitudeDeg() ;
 
     QDateTime dateTime = QDateTime::currentDateTime();
     QString date4file  = dateTime.toString("ddMMyyyy_hhmmss") ;
     nmea_fileName = "./record/NMEA_" +date4file+ +".gkmsr" ;
     device_found = false ;
 
-#ifdef _WINDOWS
+#ifdef WIN32
     comm_port = -1 ;
     comm_speed= -1 ;
     QSettings settings( QApplication::applicationDirPath() + "/conf/" + QString(CONFIG_FILENAME), QSettings::IniFormat );
@@ -84,9 +77,9 @@ GPSD::GPSD( QObject *parent) :
         if( settings.value("enable_gps").toInt() == 1 ) {
 
             if( settings.value("gps_port").isNull() ) {
-                 settings.setValue("gps_port", 1 );
-                 settings.setValue("bauds", 4800 );
-                 settings.setValue("log_NMEA", false );
+                settings.setValue("gps_port", 1 );
+                settings.setValue("bauds", 4800 );
+                settings.setValue("log_NMEA", false );
             } else {
                 comm_port = settings.value("gps_port").toInt();
                 log_NMEA  = settings.value("log_NMEA").toBool();
@@ -102,10 +95,10 @@ GPSD::GPSD( QObject *parent) :
         }
 
     } else {
-       settings.setValue( "enable_gps", "0");
-       settings.setValue("gps_port", 1 );
-       settings.setValue("bauds", 4800 );
-       settings.setValue("log_NMEA", false );
+        settings.setValue( "enable_gps", "0");
+        settings.setValue("gps_port", 1 );
+        settings.setValue("bauds", 4800 );
+        settings.setValue("log_NMEA", false );
     }
 
     settings.endGroup();
@@ -121,11 +114,11 @@ GPSD::GPSD( QObject *parent) :
             device_found = true ;
             QLogger::QLog_Error( LOGGER_NAME, "GPSD::GPSD() open ok " );
         }
-   }
+    }
 
-   if( comm_port < 0 ) {
-       startLocalTimer();
-   }
+    if( comm_port < 0 ) {
+        startLocalTimer();
+    }
 
 #else
     struct gps_data_t gps_data;
@@ -144,7 +137,7 @@ bool GPSD::hasDevice() {
 }
 
 GPSD::~GPSD() {
-#ifdef _WINDOWS
+#ifdef WIN32
     if( comm_port >= 0 ) {
         RS232_CloseComport( comm_port );
         QThread::quit();
@@ -155,7 +148,7 @@ GPSD::~GPSD() {
 
 void GPSD::startLocalTimer() {
     if( timer != NULL ) return ;
-     QLogger::QLog_Error( LOGGER_NAME, "GPSD:: start local timer" );
+    QLogger::QLog_Error( LOGGER_NAME, "GPSD:: start local timer" );
     timer = new QTimer(this);
     connect(timer, SIGNAL(timeout()), this, SLOT(SLOT_timer()));
     timer->start( 500.0 );
@@ -163,51 +156,48 @@ void GPSD::startLocalTimer() {
 
 void GPSD::SLOT_timer() {
     static int last_sec = 0;
-
-    GlobalRFData& gd = GlobalRFData::getInstance();
+    int gps_hour, gps_min, gps_sec  ;
+    int gps_day, gps_month, gps_year ;
 
     QTime now = QDateTime::currentDateTimeUtc().time() ;
-    gd.gps_hour = now.hour();
-    gd.gps_min = now.minute();
-    gd.gps_sec = now.second();
+    gps_hour = now.hour();
+    gps_min = now.minute();
+    gps_sec = now.second();
 
     QDate today = QDate::currentDate();
-    gd.gps_day = today.day();
-    gd.gps_month = today.month();
-    gd.gps_year  = today.year();
+    gps_day = today.day();
+    gps_month = today.month();
+    gps_year  = today.year();
 
-    if( gd.gps_sec != last_sec ) {
-        last_sec = gd.gps_sec ;
-        emit( hasGpsTime( gd.gps_year, gd.gps_month, gd.gps_day, gd.gps_hour,
-                          gd.gps_min, gd.gps_sec, gd.gps_msec) );
+    if( gps_sec != last_sec ) {
+        last_sec = gps_sec ;
+        emit( hasGpsTime( gps_year, gps_month, gps_day, gps_hour,
+                          gps_min, gps_sec, 0) );
     }
 }
 
 void GPSD::shutdown() {
-   m_stop = false ;
+    m_stop = false ;
 }
 
 void GPSD::run() {
-    float latitude = 0 ;
-    float longitude = 0  ;
-    float altitude = 0 ;
-    int gps_hour, gps_min, gps_sec,gps_ms ;
+    double latitude = 0 ;
+    double longitude = 0  ;
+    double altitude = 0 ;
+
+    double ttl_latitude = 0 ;
+    double ttl_longitude = 0 ;
+    double ttl_altitude = 0;
+    long ttl_measurements = 0 ;
+
+    int gps_hour, gps_min, gps_sec  ;
     int gps_day, gps_month, gps_year ;
     int last_sec = 0 ;
-    int last_msec=0 ;
     qDebug() << "GPSD::run() start " ;
 
-    GlobalRFData& gd = GlobalRFData::getInstance();
-    gd.gps_year = 0 ;
-    gd.gps_month = 0;
-    gd.gps_day = 0 ;
-    gd.gps_hour = 0 ;
-    gd.gps_min  = 0 ;
-    gd.gps_sec = 0 ;
 
-    gd.gps_altitude = 0 ;
 
-#ifdef _WINDOWS
+#ifdef WIN32
     int  i,n ;
     unsigned char buf[BUFLEN];
     unsigned long fix_age,raw_date, raw_time ;
@@ -237,6 +227,10 @@ void GPSD::run() {
                 //QLogger::QLog_Debug("GPSD", QString::fromLocal8Bit( (const char *)buf ) );
                 for( i=0 ; i < n ; i++ ) {
                     if( gps->encode( buf[i]) ) {
+                        if( gps->isDataGood() == false ) {
+                                continue ;
+                        }
+
                         //qDebug() << "good" << good++ ;
                         gps->get_position( &raw_lat, &raw_long, &fix_age);
                         gps->get_datetime( &raw_date, &raw_time, &fix_age);
@@ -249,38 +243,67 @@ void GPSD::run() {
                         gps_min = r_gps_min ;
                         gps_sec = r_gps_sec ;
 
-                        float new_latitude = raw_lat / 1000000.0 ;
-                        float new_longitude = raw_long / 1000000.0 ;
-                        float dlat = latitude - new_latitude ;
-                        float dlon = longitude - new_longitude ;
-                        float dalt = altitude - gps->getAltitude() ;
+                        double new_latitude = raw_lat / 1000000.0 ;
+                        double new_longitude = raw_long / 1000000.0 ;
+                        double new_altitude = (double)gps->getAltitude() ;
+                        bool altitude_valid = (new_altitude < 5000 ? true:false);
+                        //qDebug() << "new_altutide=" << new_altitude ;
 
-                        gd.gps_latitude = latitude ;
-                        gd.gps_longitude = longitude ;
-                        gd.gps_altitude = gps->getAltitude();
+                        // estimate change
+                        double dlat = latitude - new_latitude ;
+                        double dlon = longitude - new_longitude ;
+                        double dalt = altitude - new_altitude ;
+                        // keep old
+                        latitude = new_latitude ;
+                        longitude = new_longitude ;
+                        if( altitude_valid)
+                                altitude = new_altitude ;
 
-                        if( (fabs(dlat)>1e-6) || (fabs(dlon)>1e-6) || (fabs(dalt)>5) ) {
-                            latitude = new_latitude ;
-                            longitude = new_longitude ;
-                            altitude = gd.gps_altitude ;
 
-                            emit( hasGpsFix(latitude, longitude));
-                            if( DEBUG_GPSD ) qDebug() << "GPSD:hasGpsFix" << latitude << longitude ;
+
+                        if( altitude_valid &&  ((abs(dlat)<1e-5) || (abs(dlon)<1e-5) || (abs(dalt)<5) )) {
+                            ttl_latitude += new_latitude ;
+                            ttl_longitude += new_longitude ;
+                            ttl_altitude +=  new_altitude ;
+                            ttl_measurements++  ;
+
+                            latitude = ttl_latitude/ttl_measurements ;
+                            longitude = ttl_longitude/ttl_measurements ;
+                            altitude = ttl_altitude/ttl_measurements ;
+
+                            // average received positions
+                            emit hasGpsFix(latitude,longitude,altitude);
+
+                            //qDebug() << "improving position " << ttl_measurements ;
+                            //qDebug() << "latitude:" << QString::number(latitude , 'f', 8 );
+                            //qDebug() << "longitude:" << QString::number( ttl_longitude , 'f', 8 );
+                            //qDebug() << "new_altitude="<< new_altitude  << "ttl_altitude=" << ttl_altitude << "ttl_measurements= " << ttl_measurements ;
+                            //qDebug() << "altitude:" << QString::number(altitude );
+
+                        } else {
+                            // change, reset averager
+                            ttl_latitude = latitude ;
+                            ttl_longitude = longitude ;
+                            ttl_altitude = altitude;
+                            ttl_measurements = 1 ;
+
+                            latitude = ttl_latitude  ;
+                            longitude = ttl_longitude  ;
+                            altitude = ttl_altitude  ;
+
+                            // average received positions
+                            emit hasGpsFix(latitude,longitude,altitude);
+
+
                             QLogger::QLog_Debug("GPSD",
                                                 QString::number(r_gps_hour) + ":" + QString::number(r_gps_min) + ":" + QString::number(r_gps_sec) + ":" +
-                                                ", " + QString::number(latitude,'f',6) + "," + QString::number(longitude,'f',6) + "," + QString::number(gd.gps_altitude,'f',2) );
+                                                ", " + QString::number(new_latitude,'f',6) + "," + QString::number(new_longitude,'f',6) + "," + QString::number(new_altitude,'f',2) );
                         }
 
                         if( last_sec != gps_sec ) {
                             emit( hasGpsTime( gps_year, gps_month, gps_day, gps_hour, gps_min, gps_sec, 0) );
                             if( DEBUG_GPSD ) qDebug() << "GPSD:hasGpsTime" << gps_hour << gps_min <<  gps_sec;
                             last_sec = gps_sec ;
-                            gd.gps_year = gps_year ;
-                            gd.gps_month = gps_month;
-                            gd.gps_day = gps_day ;
-                            gd.gps_hour = gps_hour ;
-                            gd.gps_min  = gps_min ;
-                            gd.gps_sec = gps_sec ;
                         }
                     }
                 }
@@ -304,7 +327,7 @@ void GPSD::run() {
 
     //connect to GPSd
     if(gps_open("localhost", "2947", &gps_data)<0){
-        if( DEBUG_GPSD ) qDebug() << "Could not connect to GPSd" ;       
+        if( DEBUG_GPSD ) qDebug() << "Could not connect to GPSd" ;
         emit( hasError(ERROR_NO_GPSD)) ;
         device_found = false ;
         return ;
@@ -350,13 +373,7 @@ void GPSD::run() {
 
                 last_sec = gps_sec ;
                 last_msec = gps_ms ;
-                gd.gps_year = gps_year ;
-                gd.gps_month = gps_month;
-                gd.gps_day = gps_day ;
-                gd.gps_hour = gps_hour ;
-                gd.gps_min  = gps_min ;
-                gd.gps_sec = gps_sec ;
-                gd.gps_msec = gps_ms ;
+
 
                 emit( hasGpsTime( gps_year, gps_month, gps_day, gps_hour, gps_min, gps_sec, gps_ms) );
             }
