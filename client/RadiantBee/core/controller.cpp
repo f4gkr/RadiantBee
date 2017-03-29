@@ -99,12 +99,16 @@ void Controller::startAcquisition() {
 }
 
 void Controller::close() {
-     m_stop = true ;
-     radio->stopAcquisition() ;
-     while( m_state != Controller::csEnded ) {
-           QThread::msleep(10);
-     }     
-     radio->close();
+    m_stop = true ;
+    radio->stopAcquisition() ;
+    while( m_state != Controller::csEnded ) {
+        QThread::msleep(10);
+    }
+    radio->close();
+}
+
+void Controller::setDetectionThreshold(float level) {
+     processor->setDetectionThreshold(level);
 }
 
 void Controller::run() {
@@ -181,9 +185,9 @@ void Controller::process( TYPECPX*samples, int L ) {
     while( left > 0 ) {
 
         int qty = qMin(left, (int)STEP_SIZE) ;
-       // qDebug() << "put [";
+        // qDebug() << "put [";
         rc = channelizer->put(pt, qty) ;
-       // qDebug() << "]";
+        // qDebug() << "]";
         if( rc < 0 ) {
             break ;
         }
@@ -191,19 +195,10 @@ void Controller::process( TYPECPX*samples, int L ) {
         pt += qty ;
 
         if( rc == GET_DATA_OUT ) {
-            // data ready to be retrieved
-            //qDebug() << "get [" << rc ;
             rc = channelizer->get( out, STEP_SIZE )  ;
-            //qDebug() << "]";
-//            if( rc > FFT_SPECTRUM ) {
-//                 generateSpectrum( out );
-//                 emit newSpectrumAvailable(FFT_SPECTRUM);
-//            }
             while( rc > 0 ) {
-               processor->newData( out, rc, 110e3 );
-               // qDebug() << "get [" << rc ;
+                processor->newData( out, rc, 110e3 );
                 rc = channelizer->get( out, STEP_SIZE )  ;
-                // qDebug() << "]";
             }
         }
     }
@@ -253,10 +248,10 @@ void  Controller::getSpectrum( double* values ) {
 }
 
 void Controller::SLOT_detectionLevel( float level )  {
-     emit detectionLevel(level);
+    emit detectionLevel(level);
 }
 
-void Controller::SLOT_frameDetected( float signal_level, float noise_level, QString message )  {
+void Controller::SLOT_frameDetected(float signal_level, float noise_level, QString message )  {
     qDebug() << "signal_level:" << signal_level ;
     qDebug() << "message : " << message ;
 
@@ -290,22 +285,38 @@ void Controller::SLOT_frameDetected( float signal_level, float noise_level, QStr
     sempos->release(1);
     float dh = (altitude/10.0-m_Altitude) ;
     float elevation = atan2(dh,d) * 180/M_PI;
-    qDebug() << " distance :" << sqrt( d*d + dh*dh) ;
+    float dtotal  = sqrt( d*d + dh*dh) ;
+    qDebug() << " distance :" << dtotal ;
     qDebug() << " azimuth :" << azimuth  << " degrés";
-   qDebug() << " elevation :" << elevation  << " degrés";
-   qDebug() << "roll:" <<roll ;
-   qDebug() << "pitch:" << pitch ;
-   qDebug() << "yaw:" << yaw ;
+    qDebug() << " elevation :" << elevation  << " degrés";
+    qDebug() << "roll:" <<roll ;
+    qDebug() << "pitch:" << pitch ;
+    qDebug() << "yaw:" << yaw ;
 
-   emit frameDetected(signal_level, noise_level, message );
+    emit frameDetected(signal_level, noise_level, message,
+                       frameid, longitude, latitude, altitude/10.0,
+                       m_Longitude, m_Latitude, m_Altitude,
+                       elevation, azimuth, dtotal ,
+                       roll, pitch, yaw);
+
+    FILE *rbee_log = fopen(  "rbee.dat", "a");
+    if( rbee_log != NULL ) {
+        fprintf( rbee_log, "%ld;%f;%f;", frameid, signal_level, noise_level );
+        fprintf( rbee_log, "%01.7f;%01.7f;%f;", longitude, latitude, (float)(altitude/10.0) );
+        fprintf( rbee_log, "%01.7f;%01.7f;%f;", m_Longitude, m_Latitude, m_Altitude );
+        fprintf( rbee_log, "%f;%f;%f;", elevation, azimuth, dtotal );
+        fprintf( rbee_log, "%d;%d;%d\n", roll, pitch, yaw );
+        fclose( rbee_log );
+    }
+
 }
 
 void Controller::SLOT_hasGpsFix(double latitude, double longitude, double altitude) {
-     sempos->acquire(1);
-     m_Latitude = latitude ;
-     m_Longitude = longitude ;
-     m_Altitude = altitude ;
-     sempos->release(1);
+    sempos->acquire(1);
+    m_Latitude = latitude ;
+    m_Longitude = longitude ;
+    m_Altitude = altitude ;
+    sempos->release(1);
 }
 
 void Controller::SLOT_hasGpsTime(int year, int month, int day, int hour, int min, int sec, int msec) {

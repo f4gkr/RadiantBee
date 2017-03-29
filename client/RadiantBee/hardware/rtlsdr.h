@@ -61,6 +61,7 @@ public:
     SampleFifo *getFIFO() { return( fifo ); }
 
     int setRTLGain(float db ) ;
+    float getRxGain();
     bool setAutoGainMode();
     int setRxCenterFreq( uint64_t freq_hz );
     uint64_t getRxCenterFreq();

@@ -37,6 +37,7 @@
 #include "ui/spectrumplot.h"
 #include "ui/indicatorwidget.h"
 #include "ui/qcustomplot.h"
+#include "ui/gkdial.h"
 #include "qwt/qwt_plot_zoneitem.h"
 // inspired from the Qwt examples
 class SpectrumSegment: public QwtPlotZoneItem
@@ -79,7 +80,7 @@ public:
 
 public slots:
     void SLOT_detectionLevel( float level ) ;
-    void SLOT_frameDetected( float signal_level, float noise_level, QString message ) ;
+    void SLOT_frameDetected(float signal_level, float noise_level, QString message , int frameid, float uavlongitude, float uavlatitude, float uavaltitude, float antenna_longitude, float antenna_latitude, float antenna_altitude, float elevation, float azimuth, float distance, float uav_roll, float uav_pitch, float uav_yaw) ;
 
     void  SLOT_hasGpsFix( double latitude, double longitude , double altitude );
     void  SLOT_hasGpsTime( int year, int month, int day,
@@ -90,10 +91,15 @@ private slots:
     void SLOT_newSpectrum(int len  );
     void SLOT_startPressed();
 
+    void SLOT_setRxGain(int) ;
+    void SLOT_setDetectionThreshold(int);
+
 private:
     int received_frame ;
      SpectrumSegment *seg_rx ;
      CFreqCtrl *mainFDisplay ;
+     gkDial *gain_rx ;
+     gkDial *detection_threshold ;
 
      QLineEdit *uavFrame ;
 
@@ -115,6 +121,7 @@ private:
      SpectrumPlot *plot ;
      IndicatorWidget *levelWidget ;
      QCustomPlot *detection_plot ;
+
 };
 
 #endif // MAINWINDOW_H

@@ -67,12 +67,17 @@ public:
     void close();
     void getSpectrum( double* values );
 
+    void setDetectionThreshold(float level);
+
 signals:
     void newSpectrumAvailable(int len);
     void detectionLevel( float level ) ;
-    void frameDetected( float signal_level, float noise_level, QString message ) ;
-                          //int frameid, float uavlongitude, float uavlatitude, float uavaltitude,
-                         //) ;
+    void frameDetected( float signal_level, float noise_level, QString message,
+                          int frameid, float uavlongitude, float uavlatitude, float uavaltitude,
+                          float antenna_longitude, float antenna_latitude, float antenna_altitude,
+                          float elevation, float azimuth, float distance,
+                          float uav_roll, float uav_pitch, float uav_yaw
+                         ) ;
 
 public slots:
     void SLOT_detectionLevel( float level ) ;

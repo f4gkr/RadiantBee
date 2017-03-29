@@ -210,6 +210,11 @@ int RTLSDR::setRTLGain( float db )  {
     return( rc );
 }
 
+float RTLSDR::getRxGain() {
+      int value = rtlsdr_get_tuner_gain( rtlsdr_device );
+      return( value / 10.0 );
+}
+
 int RTLSDR::startAcquisition() {
     int rc ;
 

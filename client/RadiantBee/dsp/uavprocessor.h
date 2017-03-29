@@ -41,8 +41,13 @@ public:
 
     explicit UAVProcessor(QObject *parent = 0);
 
-    // appelé à chaque nouveau paquet IQ reçu
+    // change detection threshold for the correlator
+    // default is 30dB
+    void setDetectionThreshold(float level);
+
+    // call this function each time a paquet of samples is available
     void newData(TYPECPX* IQsamples, int L , int sampleRate );
+
     void raz();
 
 signals:
@@ -63,6 +68,7 @@ private:
     float ratio_max ;
     float threshold ;
     bool synched ;
+    float detection_threshold ;
     fftwf_complex * fftin, *fftout,*fftchirp;
     fftwf_plan fft_plan,fft_plan_inv ;
 

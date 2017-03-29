@@ -42,12 +42,17 @@ UAVProcessor::UAVProcessor(QObject *parent) : QObject(parent)
     fft_length = 32768*2  ;
     wr_pos = 0 ;
     synched = false ;
+    detection_threshold = 30 ;
     fftin = (fftwf_complex *) fftwf_malloc(sizeof(fftwf_complex) * fft_length);
     fftout = (fftwf_complex *) fftwf_malloc(sizeof(fftwf_complex) * fft_length);
     fftchirp  = (fftwf_complex *) fftwf_malloc(sizeof(fftwf_complex) * fft_length);
 
     fft_plan = fftwf_plan_dft_1d(fft_length, fftin, fftout, FFTW_FORWARD, FFTW_ESTIMATE );
     fft_plan_inv = fftwf_plan_dft_1d(fft_length, fftout, fftin, FFTW_BACKWARD, FFTW_ESTIMATE );
+}
+
+void UAVProcessor::setDetectionThreshold(float level) {
+     detection_threshold = level ;
 }
 
 //  IFFT( FFT(signal entrant) .* conj( FFT(Signal reference))
@@ -409,7 +414,7 @@ int  UAVProcessor::calc( float *pvmax ) {
 
       //qDebug() << "ratio:" << ratio ;
      emit detectionLevel(ratio);
-      if( ratio < 30 ) {
+      if( ratio < detection_threshold ) {
           return(-1);
        }
 

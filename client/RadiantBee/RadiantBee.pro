@@ -67,7 +67,8 @@ SOURCES += main.cpp\
     ui/qcustomplot.cpp \
     hardware/gpdsd.cpp \
     hardware/windows/tinygps.cpp \
-    hardware/windows/rs232.c
+    hardware/windows/rs232.c \
+    ui/gkdial.cpp
 
 HEADERS  += mainwindow.h \
     ui/freqctrl.h \
@@ -83,4 +84,5 @@ HEADERS  += mainwindow.h \
     ui/qcustomplot.h \
     hardware/gpdsd.h \
     hardware/windows/rs232.h \
-    hardware/windows/tinygps.h
+    hardware/windows/tinygps.h \
+    ui/gkdial.h

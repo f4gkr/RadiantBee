@@ -66,10 +66,8 @@ MainWindow::MainWindow(QWidget *parent)
     mainFDisplay->setMinimumWidth(200);
     mainFDisplay->setMinimumWidth(500);
     tb_layout->addWidget(mainFDisplay);
-
-    top_band->setLayout(tb_layout);
     top_band->setMaximumHeight(40);
-    top_band->setMinimumHeight(40);
+    top_band->setLayout(tb_layout);
     vlayout->addWidget( top_band );
 
     // center band
@@ -91,6 +89,15 @@ MainWindow::MainWindow(QWidget *parent)
     cl_widget->setLayout(cllayout);
     cllayout->setContentsMargins( 1,1,1,1);
     cllayout->setAlignment(Qt::AlignLeft | Qt::AlignTop  );
+
+    gain_rx = new gkDial(4,tr("RF Gain"));
+    gain_rx->setScale(0,40);
+    cllayout->addWidget(gain_rx);
+
+    detection_threshold= new gkDial(4,tr("Correlator"));
+    detection_threshold->setScale(5,40);
+    detection_threshold->setValue(30);
+    cllayout->addWidget(detection_threshold);
 
     zuluDisplay = new QLCDNumber(11);
     zuluDisplay->setSegmentStyle(QLCDNumber::Flat);
@@ -221,6 +228,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect( memButton, SIGNAL(pressed()), this, SLOT(SLOT_startPressed()));
     connect( mainFDisplay, SIGNAL(newFrequency(qint64)),
              this, SLOT(SLOT_userTunesFreqWidget(qint64)) );
+    connect( gain_rx, SIGNAL(valueChanged(int)), this, SLOT(SLOT_setRxGain(int)));
+    connect( detection_threshold, SIGNAL(valueChanged(int)), this, SLOT(SLOT_setDetectionThreshold(int)));
 
     GPSD& gpsd= GPSD::getInstance() ;
     connect( &gpsd, SIGNAL(hasGpsFix(double,double,double)), this, SLOT(SLOT_hasGpsFix(double,double,double)), Qt::QueuedConnection );
@@ -239,13 +248,16 @@ void MainWindow::setRadio( RTLSDR* device ) {
     Controller& ctrl = Controller::getInstance() ;
     connect( &ctrl, SIGNAL(newSpectrumAvailable(int)),  this, SLOT(SLOT_newSpectrum(int)), Qt::QueuedConnection );
     connect( &ctrl, SIGNAL(detectionLevel(float)), this, SLOT(SLOT_detectionLevel(float)), Qt::QueuedConnection );
-    connect( &ctrl, SIGNAL(frameDetected(float,float,QString)), this,SLOT(SLOT_frameDetected(float,float,QString)), Qt::QueuedConnection );
+    connect( &ctrl, SIGNAL(frameDetected(float,float,QString,int,float,float,float,float,float,float,float,float,float,float,float,float)),
+             this, SLOT(SLOT_frameDetected(float,float,QString,int,float,float,float,float,float,float,float,float,float,float,float,float)),
+             Qt::QueuedConnection );
+
+    gain_rx->setValue( device->getRxGain()  );
 }
 
-void MainWindow::SLOT_userTunesFreqWidget(qint64 newFrequency) {
-    qDebug() << "MainWindow::SLOT_userTunesFreqWidget() "  << newFrequency  ;
+void MainWindow::SLOT_userTunesFreqWidget(qint64 newFrequency) {    
     Controller& ctrl = Controller::getInstance() ;
-    ctrl.setRxCenterFrequency( newFrequency );
+    ctrl.setRxCenterFrequency( newFrequency - FRAME_CENTER);
     double fmin = (double)newFrequency - 55e3 ;
     double fmax = (double)newFrequency + 55e3 ;
     seg_rx->setInterval(  fmin/1e6, fmax/1e6);
@@ -282,7 +294,7 @@ void MainWindow::SLOT_newSpectrum( int len  ) {
 
     plot->setPowerTab(rx_center_frequency, power_dB,  len, bw );
     double fmin = (double)rx_center_frequency + FRAME_OFFSET_LOW ;
-    double fmax = (double)rx_center_frequency + + FRAME_OFFSET_HIGH ;
+    double fmax = (double)rx_center_frequency +  FRAME_OFFSET_HIGH ;
     seg_rx->setInterval(  fmin/1e6, fmax/1e6);
 }
 
@@ -299,30 +311,25 @@ void MainWindow::SLOT_detectionLevel( float level )  {
     levelWidget->setValue( level );
 }
 
-void MainWindow::SLOT_frameDetected( float signal_level, float noise_level, QString message )  {
+void MainWindow::SLOT_frameDetected(  float signal_level, float noise_level, QString message,
+                                       int frameid, float uavlongitude, float uavlatitude, float uavaltitude,
+                                       float antenna_longitude, float antenna_latitude, float antenna_altitude,
+                                       float elevation, float azimuth, float distance,
+                                       float uav_roll, float uav_pitch, float uav_yaw
+                                      )  {
     detection_plot->graph(0)->addData( received_frame, -1*signal_level );
     detection_plot->xAxis->setRange( received_frame,60,Qt::AlignRight );
     detection_plot->replot();
     received_frame++ ;
 
-    // parse frame
-    long frameid ;
-    float longitude ;
-    float latitude  ;
-    int altitude ;
-     int roll, pitch, yaw ;
-
-    QByteArray tmp = message.toLocal8Bit() ;
-    char *rawframe = tmp.data() ;
-    sscanf( rawframe, "%ld;%f;%f;%d;%d;%d;%d", &frameid,
-            &longitude, &latitude, &altitude,
-            &roll,&pitch,&yaw);
-
-    uavLatitude->setText(QString::number( latitude, 'f', 8));
-    uavLongitude->setText(QString::number( longitude, 'f', 8));
-    uavAltitude->setText(QString::number( altitude/10, 'f', 3));
+    uavLatitude->setText(QString::number( uavlatitude, 'f', 8));
+    uavLongitude->setText(QString::number( uavlongitude, 'f', 8));
+    uavAltitude->setText(QString::number( uavaltitude/10, 'f', 3));
     uavFrameID->setText( QString::number(frameid));
 
+    uavDistance->setText(QString::number( distance, 'f', 2) + " m.");
+    uavElevation->setText(QString::number( elevation, 'f', 1) + "  deg.");
+    uavAzimuth->setText(QString::number( azimuth, 'f', 1) + "  deg.");
     uavFrame->setText( message );
 }
 
@@ -341,4 +348,15 @@ void MainWindow::SLOT_hasGpsTime(int year, int month, int day, int hour, int min
 
 
     zuluDisplay->display( zuluTime );
+}
+
+void MainWindow::SLOT_setRxGain(int g) {
+        if( radio == NULL )
+            return ;
+        radio->setRTLGain( g );
+}
+
+void MainWindow::SLOT_setDetectionThreshold(int level) {
+      Controller& ctrl = Controller::getInstance() ;
+      ctrl.setDetectionThreshold(level);
 }
