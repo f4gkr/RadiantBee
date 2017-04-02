@@ -5,3 +5,6 @@ RadiantBee is a tentative to use a UAV for antenna calibration. The UAV transmit
 
 Current version transmits a 100 KHz wide FMCM chirp for 250ms followed by a FSK message and a silence (250 ms).
 The base station estimate power of received signal during the chirp (correlator) and does the same during the 250ms of silence. The difference between chirp and silence gives the SNR.
+
+Transmitter (the flying BEE) is currently working on RPI + hackRF + Pololu AltIMU + GPS.
+Receiver uses GPS + RTLSDR
