@@ -315,13 +315,13 @@ void MainWindow::SLOT_stopPressed() {
 void MainWindow::SLOT_newSpectrum( int len , double smin,  double smax ) {
     double power_dB[len] ;
     float bw ;
-   // bool rescale = false ;
+    bool rescale = false ;
 
     uint64_t rx_center_frequency = radio->getRxCenterFreq() ;
     bw = radio->getRxSampleRate() ;
     Controller& ctrl = Controller::getInstance() ;
     ctrl.getSpectrum( power_dB );
-/*
+
     if( smin < plot->getMinScale() ) {
          rescale = true ;
     } else {
@@ -338,10 +338,11 @@ void MainWindow::SLOT_newSpectrum( int len , double smin,  double smax ) {
         }
     }
 
-    if( rescale )
+    if( rescale ) {
         plot->setMinMaxScales( .1*smin + .9*plot->getMinScale(),
                                .1*smax  + .9*plot->getMaxScale()  );
-*/
+    }
+
     plot->setPowerTab(rx_center_frequency, power_dB,  len, bw );
     double fmin = (double)rx_center_frequency + FRAME_OFFSET_LOW ;
     double fmax = (double)rx_center_frequency +  FRAME_OFFSET_HIGH ;

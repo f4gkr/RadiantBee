@@ -269,6 +269,7 @@ inline double angleDiff(double a,double b){
         dif += 2*M_PI;
     return dif - M_PI;
 }
+
 inline double unwrap(double previousAngle,double newAngle){
     return previousAngle - angleDiff(newAngle,angleConv(previousAngle));
 }
@@ -332,6 +333,7 @@ char*  UAVProcessor::demod(TYPECPX* psamples, int Lmax , int *consumed) {
                 }
                 work[s++].re = acc ;
         }
+
         if( false ) {
            FILE *f = fopen( "demod.dat", "wb" );
            fwrite( work, sizeof( TYPECPX), Lmax, f );
@@ -367,10 +369,6 @@ char*  UAVProcessor::demod(TYPECPX* psamples, int Lmax , int *consumed) {
             (*consumed) = Lmax/2 ;
             return(NULL);
         }
-
-        //qDebug() << "start decoded at " << start ;
-
-
 
          TYPECPX *position = work ;
          position += start ;
