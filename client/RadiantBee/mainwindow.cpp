@@ -44,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     radio = NULL ;
+    setAttribute(Qt::WA_DeleteOnClose);
 
     QWidget *center_widget = new QWidget;
     QVBoxLayout *vlayout = new QVBoxLayout;
@@ -57,10 +58,15 @@ MainWindow::MainWindow(QWidget *parent)
     tb_layout->setAlignment( Qt::AlignLeft );
     tb_layout->setContentsMargins( 1,1,1,1);
 
-    QPushButton *memButton = new QPushButton("START");
-    memButton->setMaximumWidth(50);
-    memButton->setToolTip(tr("Start SDR"));
-    tb_layout->addWidget( memButton );
+    QPushButton *startButton = new QPushButton("START");
+    startButton->setMaximumWidth(50);
+    startButton->setToolTip(tr("Start SDR"));
+    tb_layout->addWidget( startButton );
+
+    QPushButton *stopButton = new QPushButton("STOP");
+    stopButton->setMaximumWidth(50);
+    stopButton->setToolTip(tr("Stop SDR"));
+    tb_layout->addWidget( stopButton );
 
     mainFDisplay = new CFreqCtrl();
     mainFDisplay->setMinimumWidth(200);
@@ -78,7 +84,7 @@ MainWindow::MainWindow(QWidget *parent)
     cb_layout->setContentsMargins( 1,1,1,1);
 
     plot = new SpectrumPlot();
-    plot->setMinMaxScales( -110, -30 );
+    plot->setMinMaxScales( -90, -40 );
     plot->setMinimumHeight( 150 );
     cb_layout->addWidget( plot );
 
@@ -225,15 +231,19 @@ MainWindow::MainWindow(QWidget *parent)
     QDesktopWidget *desktop = QApplication::desktop();
     resize( desktop->availableGeometry(this).size() * .7 );
 
-    connect( memButton, SIGNAL(pressed()), this, SLOT(SLOT_startPressed()));
+    connect( startButton, SIGNAL(pressed()), this, SLOT(SLOT_startPressed()));
+    connect( stopButton, SIGNAL(pressed()), this, SLOT(SLOT_stopPressed()));
+
     connect( mainFDisplay, SIGNAL(newFrequency(qint64)),
              this, SLOT(SLOT_userTunesFreqWidget(qint64)) );
     connect( gain_rx, SIGNAL(valueChanged(int)), this, SLOT(SLOT_setRxGain(int)));
     connect( detection_threshold, SIGNAL(valueChanged(int)), this, SLOT(SLOT_setDetectionThreshold(int)));
 
     GPSD& gpsd= GPSD::getInstance() ;
-    connect( &gpsd, SIGNAL(hasGpsFix(double,double,double)), this, SLOT(SLOT_hasGpsFix(double,double,double)), Qt::QueuedConnection );
-    connect( &gpsd, SIGNAL(hasGpsTime(int,int,int,int,int,int,int)), this, SLOT(SLOT_hasGpsTime(int,int,int,int,int,int,int)),Qt::QueuedConnection);
+    connect( &gpsd, SIGNAL(hasGpsFix(double,double,double)), this,
+             SLOT(SLOT_hasGpsFix(double,double,double)), Qt::QueuedConnection );
+    connect( &gpsd, SIGNAL(hasGpsTime(int,int,int,int,int,int,int)), this,
+             SLOT(SLOT_hasGpsTime(int,int,int,int,int,int,int)),Qt::QueuedConnection);
 
 }
 
@@ -246,7 +256,8 @@ void MainWindow::setRadio( RTLSDR* device ) {
     plot->setNewParams( radio->getRxCenterFreq(), radio->getRxSampleRate() ) ;
 
     Controller& ctrl = Controller::getInstance() ;
-    connect( &ctrl, SIGNAL(newSpectrumAvailable(int)),  this, SLOT(SLOT_newSpectrum(int)), Qt::QueuedConnection );
+    connect( &ctrl, SIGNAL(newSpectrumAvailable(int, double, double)),  this,
+             SLOT(SLOT_newSpectrum(int, double, double)), Qt::QueuedConnection );
     connect( &ctrl, SIGNAL(detectionLevel(float)), this, SLOT(SLOT_detectionLevel(float)), Qt::QueuedConnection );
     connect( &ctrl, SIGNAL(frameDetected(float,float,QString,int,float,float,float,float,float,float,float,float,float,float,float,float)),
              this, SLOT(SLOT_frameDetected(float,float,QString,int,float,float,float,float,float,float,float,float,float,float,float,float)),
@@ -256,42 +267,81 @@ void MainWindow::setRadio( RTLSDR* device ) {
 }
 
 void MainWindow::SLOT_userTunesFreqWidget(qint64 newFrequency) {    
-    Controller& ctrl = Controller::getInstance() ;
-    ctrl.setRxCenterFrequency( newFrequency - FRAME_CENTER);
-    double fmin = (double)newFrequency - 55e3 ;
-    double fmax = (double)newFrequency + 55e3 ;
+
+    plot->razMaxHold();
+
+    double fmin = (double)newFrequency + FRAME_OFFSET_LOW ;
+    double fmax = (double)newFrequency + FRAME_OFFSET_HIGH ;
+
     seg_rx->setInterval(  fmin/1e6, fmax/1e6);
+
+    Controller& ctrl = Controller::getInstance() ;
+    ctrl.setRxCenterFrequency( newFrequency );
 }
 
+// start SDR pressed
 void MainWindow::SLOT_startPressed() {
-    qDebug() << "MainWindow::SLOT_startPressed() " ;
-    received_frame = 0 ;
+   qint64 newFrequency = 439795000 ;
+   Controller& ctrl = Controller::getInstance() ;
+
     if( radio == NULL )
         return ;
 
-    radio->setRxCenterFreq(439795000);
+    if( ctrl.isAcquiring()  )
+            return ;
 
-    qint64 newFrequency = radio->getRxCenterFreq() ;
+    received_frame = msg_count = 0 ;
     mainFDisplay->resetToFrequency(  newFrequency );
     plot->setNewParams(  newFrequency, radio->getRxSampleRate() ) ;
     double fmin = (double)newFrequency + FRAME_OFFSET_LOW ;
     double fmax = (double)newFrequency + FRAME_OFFSET_HIGH ;
     seg_rx->setInterval(  fmin/1e6, fmax/1e6);
 
-    Controller& ctrl = Controller::getInstance() ;
+    ctrl.setRxCenterFrequency( newFrequency  );
     ctrl.startAcquisition();
 }
 
+void MainWindow::SLOT_stopPressed() {
+    Controller& ctrl = Controller::getInstance() ;
+    if( radio == NULL )
+        return ;
+    if( !ctrl.isAcquiring() ) {
+        return ;
+    }
+    ctrl.stopAcquisition();
+}
 
-void MainWindow::SLOT_newSpectrum( int len  ) {
+
+void MainWindow::SLOT_newSpectrum( int len , double smin,  double smax ) {
     double power_dB[len] ;
     float bw ;
+   // bool rescale = false ;
 
     uint64_t rx_center_frequency = radio->getRxCenterFreq() ;
     bw = radio->getRxSampleRate() ;
     Controller& ctrl = Controller::getInstance() ;
     ctrl.getSpectrum( power_dB );
+/*
+    if( smin < plot->getMinScale() ) {
+         rescale = true ;
+    } else {
+        if( abs( smin - plot->getMinScale() ) > 25 ) {
+             rescale = true ;
+        }
+    }
 
+    if( smax > plot->getMaxScale() ) {
+         rescale = true ;
+    } else {
+        if( abs( smax - plot->getMaxScale() ) > 25 ) {
+             rescale = true ;
+        }
+    }
+
+    if( rescale )
+        plot->setMinMaxScales( .1*smin + .9*plot->getMinScale(),
+                               .1*smax  + .9*plot->getMaxScale()  );
+*/
     plot->setPowerTab(rx_center_frequency, power_dB,  len, bw );
     double fmin = (double)rx_center_frequency + FRAME_OFFSET_LOW ;
     double fmax = (double)rx_center_frequency +  FRAME_OFFSET_HIGH ;
@@ -300,15 +350,23 @@ void MainWindow::SLOT_newSpectrum( int len  ) {
 
 MainWindow::~MainWindow()
 {
+    SLOT_stopPressed();
+
     GPSD& gpsd= GPSD::getInstance() ;
     gpsd.shutdown();
 
     Controller& ctrl = Controller::getInstance() ;
     ctrl.close();
+
 }
 
 void MainWindow::SLOT_detectionLevel( float level )  {
-    levelWidget->setValue( level );
+    qDebug() << "level=" << level ;
+    levelWidget->setValue( level );    
+    detection_plot->graph(0)->addData( msg_count/10.0, level);
+    detection_plot->xAxis->setRange( msg_count/10.0,60,Qt::AlignRight );
+    detection_plot->replot();
+    msg_count++ ;
 }
 
 void MainWindow::SLOT_frameDetected(  float signal_level, float noise_level, QString message,
@@ -317,9 +375,9 @@ void MainWindow::SLOT_frameDetected(  float signal_level, float noise_level, QSt
                                        float elevation, float azimuth, float distance,
                                        float uav_roll, float uav_pitch, float uav_yaw
                                       )  {
-    detection_plot->graph(0)->addData( received_frame, -1*signal_level );
-    detection_plot->xAxis->setRange( received_frame,60,Qt::AlignRight );
-    detection_plot->replot();
+//    detection_plot->graph(0)->addData( received_frame, -1*signal_level );
+//    detection_plot->xAxis->setRange( received_frame,60,Qt::AlignRight );
+//    detection_plot->replot();
     received_frame++ ;
 
     uavLatitude->setText(QString::number( uavlatitude, 'f', 8));

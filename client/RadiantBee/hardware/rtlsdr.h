@@ -72,9 +72,9 @@ public:
     static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) ;
     rtlsdr_dev_t *rtlsdr_device ;
     sem_t mutex;
-
+    static  bool m_stop ;
 private:
-    bool m_stop ;
+
     char *hardwareName ;
     int dev_index  ;
     int device_count ;

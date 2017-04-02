@@ -64,13 +64,16 @@ public:
     void setRxCenterFrequency( uint64_t frequency ) ;
 
     void startAcquisition();
+    void stopAcquisition();
+    bool isAcquiring();
+
     void close();
     void getSpectrum( double* values );
 
     void setDetectionThreshold(float level);
 
 signals:
-    void newSpectrumAvailable(int len);
+    void newSpectrumAvailable(int len, double minlevel, double maxlevel);
     void detectionLevel( float level ) ;
     void frameDetected( float signal_level, float noise_level, QString message,
                           int frameid, float uavlongitude, float uavlatitude, float uavaltitude,
@@ -98,6 +101,7 @@ private:
     int m_state, next_state ;
 
     double *spectrum ;
+    double smin, smax ;
     double *hamming_coeffs ;
     fftwf_complex * fftin ;
      fftwf_plan plan ;

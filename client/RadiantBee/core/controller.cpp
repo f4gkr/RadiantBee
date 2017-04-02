@@ -98,6 +98,20 @@ void Controller::startAcquisition() {
     return ;
 }
 
+void Controller::stopAcquisition() {
+    if( !this->isRunning() )
+        return ;
+
+    if( m_state == Controller::csRun ) {
+        next_state = Controller::csStop ;
+    }
+    return ;
+}
+
+bool Controller::isAcquiring() {
+    return( m_state ==Controller::csRun ) ;
+}
+
 void Controller::close() {
     m_stop = true ;
     radio->stopAcquisition() ;
@@ -112,6 +126,7 @@ void Controller::setDetectionThreshold(float level) {
 }
 
 void Controller::run() {
+    int i ;
     next_state = m_state ;
     SampleFifo *fifo = NULL ;
     TYPECPX* samples ;
@@ -141,6 +156,9 @@ void Controller::run() {
             break ;
 
         case Controller::csStart:
+            for( i=0 ; i < FFT_SPECTRUM ; i++ ) {
+                     spectrum[i] = -50 ;
+            }
             processor->raz();
             channelizer->reset();
             channelizer->setCenterOfWindow( FRAME_CENTER );
@@ -179,7 +197,7 @@ void Controller::process( TYPECPX*samples, int L ) {
 
     if( L > FFT_SPECTRUM ) {
         generateSpectrum(samples);
-        emit newSpectrumAvailable(FFT_SPECTRUM);
+        emit newSpectrumAvailable(FFT_SPECTRUM, smin, smax);
     }
 
     while( left > 0 ) {
@@ -211,6 +229,9 @@ void Controller::process( TYPECPX*samples, int L ) {
 void Controller::generateSpectrum( TYPECPX *samples ) {
     int i,j ;
     double cpow = 2.0/FFT_SPECTRUM ;
+
+    smin = 0 ;
+    smax = -200 ;
     for (i = 0;  i < FFT_SPECTRUM;i++)
     {
         fftin[i][0] = samples[i].re * hamming_coeffs[i];
@@ -226,7 +247,10 @@ void Controller::generateSpectrum( TYPECPX *samples ) {
         float b = fftin[i][1];
         float modulus = sqrtf( a*a + b*b );
         double dbFs = 20*log10( cpow * modulus + 1e-9 );
-        spectrum[j++] = dbFs ;
+        spectrum[j] = .9*spectrum[j] + .1*dbFs ;
+        if( spectrum[j] > smax ) smax = spectrum[j] ;
+        if( spectrum[j] < smin ) smin = spectrum[j] ;
+        j++ ;
     }
     // pos spectrum
     for( i=0 ; i < FFT_SPECTRUM/2 ; i++ ) {
@@ -234,7 +258,10 @@ void Controller::generateSpectrum( TYPECPX *samples ) {
         float b = fftin[i][1];
         float modulus = sqrtf( a*a + b*b );
         double dbFs = 20*log10( cpow * modulus + 1e-9 );
-        spectrum[j++] = dbFs ;
+        spectrum[j] = .9*spectrum[j] + .1*dbFs ;
+        if( spectrum[j] > smax ) smax = spectrum[j] ;
+        if( spectrum[j] < smin ) smin = spectrum[j] ;
+        j++ ;
     }
     semspectrum->release(1);
 }

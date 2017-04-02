@@ -31,8 +31,10 @@
 #include <QDebug>
 #include <math.h>
 
-#define UAV_MSG_LENGTHAT4MHZ (1e6+800)
+
 #define UAV_BITRATE (800)
+#define UAV_BYTE_LENGTH (UAV_BITRATE*10)
+#define UAV_MSG_LENGTHAT4MHZ (1e6+800)
 
 UAVProcessor::UAVProcessor(QObject *parent) : QObject(parent)
 {
@@ -49,6 +51,8 @@ UAVProcessor::UAVProcessor(QObject *parent) : QObject(parent)
 
     fft_plan = fftwf_plan_dft_1d(fft_length, fftin, fftout, FFTW_FORWARD, FFTW_ESTIMATE );
     fft_plan_inv = fftwf_plan_dft_1d(fft_length, fftout, fftin, FFTW_BACKWARD, FFTW_ESTIMATE );
+
+    m_state = next_state = UAVProcessor::sInit ;
 }
 
 void UAVProcessor::setDetectionThreshold(float level) {
@@ -61,8 +65,7 @@ void UAVProcessor::generate(TYPEREAL bandwidth, TYPEREAL sampleRate, long length
     double t = 0 ;
     int n = 0 ;
 
-    msg_length = (int)sampleRate ; //( UAV_MSG_LENGTHAT4MHZ / 4000000.0 * sampleRate)   ;
-    //qDebug() << "UAV Msg length is " << msg_length ;
+    msg_length = (int)(sampleRate*.75) ;
     if( samples != NULL ) {
          free( samples );
     }
@@ -112,12 +115,25 @@ void UAVProcessor::raz() {
     synched = false ;
 }
 
+QString UAVProcessor::stateToS(int s) {
+    switch(s) {
+    case sInit: return( QString("sInit"));
+    case sSearch: return( QString("sSearch"));
+    case sChirpFound: return( QString("sChirpFound"));
+    case sDecodeFSK: return( QString("sDecodeFSK"));
+    case sMeasureNoise: return( QString("sMeasureNoise"));
+    }
+    return("");
+}
+
 void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
     int i,k ;
     int p ;
-    //qDebug() << "UAVProcessor::newData() L="<< L << " sampleRate="<<sampleRate ;
+   double v ;
+  char *msg ;
+
     if( sampleRate < 100e3 ) {
-        qDebug() << "bande " << sampleRate << " too small" ;
+        qDebug() << "bandwith " << sampleRate << " too small" ;
         return ;
     }
 
@@ -131,78 +147,108 @@ void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
         synched = false ;
         return ;
     }
+    i= 0 ;
+    while( i < L ) {
 
-    for( i=0 ; (i < L) && (msg_wrpos <msg_length) ; i++  ) {
-           samples[msg_wrpos++] = IQsamples[i] ;
-    }
-
-    if( msg_wrpos < msg_length )  {
-        return ;
-    }
-
-
-    memcpy( (void *)fftin, (void *)samples, fft_length*sizeof(TYPECPX));
-
-    p = calc(NULL);
-    //qDebug() << "p=" << p ;
-
-    if( (p < 0 ) || (p>chirp_length)) {
-        // qDebug() << " shifting by chirp_length " << chirp_length ;
-         memmove( (void *)samples, (void *)&samples [chirp_length] ,(msg_length-chirp_length)*sizeof(TYPECPX));
-         msg_wrpos -= chirp_length ;
-         for(  ; (i < L) && (msg_wrpos <msg_length) ; i++  ) {
-                samples[msg_wrpos++] = IQsamples[i] ;
-         }
-         return ;
-    }
-
-   // qDebug() << " shifting by p= " << p ;
-    if( p > 0 ) {
-        //if( p > 10 ) p-=200 ;
-        memmove( (void *)samples, (void *)&samples [p] ,(msg_length - p)*sizeof(TYPECPX));
-        msg_wrpos -= p ;
-        p = 0 ;
-
+        // concatenate received samples with previous ones
         for(  ; (i < L) && (msg_wrpos <msg_length) ; i++  ) {
-           samples[msg_wrpos++] = IQsamples[i] ;
-        }        
-    }
-
-    k = (int)( UAV_MSG_LENGTHAT4MHZ / 4000000.0 * sampleRate)  ;
-    if( msg_wrpos < k ) {
-        return ;
-    }
-
-    //qDebug() << "process message" ;
-    memcpy( (void *)fftin, (void *)samples, fft_length*sizeof(TYPECPX));
-    for( i=chirp_length+100; i < fft_length ; i++ ) {
-            fftin[i][0] = fftin[i][1] = 0 ;
-    }
-    float signal_plus_noise ;
-    p = calc(&signal_plus_noise);
-
-    if( p >= 0 ) {
-        int offset_search_fsk =  chirp_length  - m_bandwidth/UAV_BITRATE  ; // one bit before
-        TYPECPX* psamples = samples + offset_search_fsk ;
-        // appel demodulation FSK pour chercher la trame
-        char *msg = demod( psamples, msg_wrpos-chirp_length  ) ;
-
-        if( msg != NULL ) {
-            int offset_notx = (strlen(msg)+2)*10*m_bandwidth/UAV_BITRATE + (800 * m_bandwidth) / 4e6 ;
-            psamples += offset_notx ;
-            float noise_only = 0 ;
-            calc(&noise_only);
-            double v2 = 20*log10( signal_plus_noise - noise_only ) ;
-            qDebug() << QString::fromLocal8Bit(msg);
-
-            emit frameDetected( v2, 20*log10(noise_only), QString::fromLocal8Bit(msg));           
+            samples[msg_wrpos++] = IQsamples[i] ;
         }
 
-    } else {
-        printf("Error \n");
+        if( next_state != m_state ) {
+            m_state = next_state ;
+            //qDebug() << "UAVProcessor::newData : " << stateToS( m_state ) << " msg_wrpos=" << msg_wrpos;
+        }
+
+
+        switch( m_state ) {
+        case sInit:
+            signal_plus_noise = 0 ;
+            noise_only = 0 ;
+            next_state = sSearch ;
+            break ;
+
+        case sSearch:
+            // check we have enough samples
+            if( msg_wrpos < fft_length )  {
+                continue ;
+            }
+            // search for chirp - synchro
+            // copy n (=fft_length) first samples to FFT buffer and search for chirp inside
+            memcpy( (void *)fftin, (void *)samples, fft_length*sizeof(TYPECPX));
+            p = calc(NULL);
+            // check that we found a chirp starting in the n first samples
+            // if not shift left and exit
+            if( p < 0 ) {
+                int shift_samples_count = chirp_length ;
+                memmove( (void *)samples, (void *)&samples [shift_samples_count] ,(msg_length-shift_samples_count)*sizeof(TYPECPX));
+                msg_wrpos -= shift_samples_count ;
+                break ;
+            }
+            next_state = sChirpFound ;
+            if( p > 0 ) {
+                // a chirp was found at position p, discard samples before p
+                memmove( (void *)samples, (void *)&samples [p] ,(msg_length - p)*sizeof(TYPECPX));
+                msg_wrpos -= p ;
+            }
+            break ;
+
+        case sChirpFound:
+            if( msg_wrpos < fft_length )  {
+                continue ;
+            }
+            memcpy( (void *)fftin, (void *)samples, fft_length*sizeof(TYPECPX));
+            for( k=chirp_length+100; k < fft_length ; k++ ) {
+                fftin[k][0] = fftin[k][1] = 0 ;
+            }
+            p = calc(&signal_plus_noise);
+            // discard and shift left by chirp_length samples - one bit @UAV_BITRATE
+            k = (int)(.8 * chirp_length) ; // - 10*m_bandwidth/UAV_BITRATE ;
+            memmove( (void *)samples, (void *)&samples [k] ,(msg_length - k)*sizeof(TYPECPX));
+            msg_wrpos -= k ;
+            next_state = sDecodeFSK ;
+            break ;
+
+        case sDecodeFSK:
+
+            if( msg_wrpos < 3*chirp_length )  {
+                continue ;
+            }
+            k = 0 ;
+            msg = demod( samples,  msg_wrpos, &k  ) ;
+            if( k > 0 ) {
+                // we consumed k samples for the FSK frame, shift
+                memmove( (void *)samples, (void *)&samples [k] ,(msg_length - k)*sizeof(TYPECPX));
+                msg_wrpos -= k ;
+            }
+
+            if( msg == NULL ) {
+                 //qDebug() << "UAVProcessor::newData : " << stateToS( m_state ) << " msg not found k=" << k;
+                next_state = sSearch ;
+                continue ;
+            }
+
+            lastFrameReceived =  QString::fromLocal8Bit(msg);
+            next_state = sMeasureNoise ;
+            break;
+
+        case sMeasureNoise:
+            if( msg_wrpos <chirp_length )  {
+                continue ;
+            }
+            memcpy( (void *)fftin, (void *)samples, chirp_length*sizeof(TYPECPX));
+            for( k=chirp_length; k < fft_length ; k++ ) {
+                fftin[k][0] = fftin[k][1] = 0 ;
+            }
+            calc(&noise_only);
+            v = 20*log10( signal_plus_noise - noise_only ) ;
+            emit frameDetected( v, 20*log10(noise_only),lastFrameReceived);
+            memmove( (void *)samples, (void *)&samples [chirp_length] ,(msg_length - chirp_length)*sizeof(TYPECPX));
+            msg_wrpos -= chirp_length ;
+            next_state = sSearch ;
+            break;
+        }
     }
-    memmove( (void *)samples, (void *)&samples [chirp_length] ,(msg_length - chirp_length)*sizeof(TYPECPX));
-    msg_wrpos -= k ;
 
 }
 
@@ -227,25 +273,32 @@ inline double unwrap(double previousAngle,double newAngle){
     return previousAngle - angleDiff(newAngle,angleConv(previousAngle));
 }
 
-double lpf[] = {0.014591982220007269, 0.030622195905371408, 0.072593412916822475, 0.12448046405006548,
+#define LPF_TAPS (11)
+double lpf[] = {
+       0.014591982220007269,  0.030622195905371408,  0.072593412916822475, 0.12448046405006548,
        0.16646244448643438, 0.1824990008425979, 0.16646244448643438, 0.12448046405006548,
-       0.072593412916822475, 0.030622195905371408, 0.014591982220007269};
+       0.072593412916822475,  0.030622195905371408,  0.014591982220007269};
 
-char*  UAVProcessor::demod( TYPECPX* psamples, int L ) {
+char*  UAVProcessor::demod(TYPECPX* psamples, int Lmax , int *consumed) {
          float last_angle = 0 ;
          char rxmsg[255];
          int decimation = m_bandwidth/UAV_BITRATE ;
          int symbol = (800 * m_bandwidth) / 4e6 + decimation/2 ;
-
+         TYPECPX work[Lmax] ;
+        float P = 0 ;
          if( false ) {
              FILE *f = fopen( "samples.dat", "wb" );
-             fwrite( psamples, sizeof( TYPECPX), L, f );
+             fwrite( psamples, sizeof( TYPECPX), Lmax, f );
              fclose( f );
+             qDebug() << "writing debug files samples.dat with " << Lmax << " samples" ;
          }
 
-         // calculer dphi/dt
+        (*consumed) = 0 ;
+         // calc dphi/dt
          float pmoy = 0 ;
-         for( int i=0 ; i < L ; i++ ) {
+         float pmin = 1 ;
+         float pmax = 0 ;
+         for( int i=0 ; i < Lmax ; i++ ) {
                  float I =  psamples[i].re ;
                  float Q =  psamples[i].im ;
                  float angle = atan2f(Q , I)  ;
@@ -253,64 +306,92 @@ char*  UAVProcessor::demod( TYPECPX* psamples, int L ) {
                  angle = unwrap( last_angle, angle );
                  float diff = angle-last_angle ;
                  // partie réelle = phase
-                 psamples[i].re = diff ;
+                 work[i].re = diff ;
 
                  // partie imaginaire = puissance
-                 float P = sqrtf( I*I + Q*Q ) ;
+                 P = .8*P + .2*sqrtf( I*I + Q*Q ) ;
                  pmoy += P ;
-                 psamples[i].im = P ;
+                 work[i].im = P ;
                  last_angle = angle ;
+                 if( P < pmin ) {
+                      pmin = P ;
+                 }
+                 if( P > pmax ) {
+                      pmax = P ;
+                 }
          }
-        pmoy /= L ;
-
+        pmoy /= Lmax ;
+        float power_threshold  = pmin + (pmax-pmin)/3 ;
+        //qDebug() << "threshold:" << power_threshold << " pmin=" << pmin << "pmax=" << pmax << " pmoy=" << pmoy ;
         // low pass filter phase sur psamples[i].re
         int s = 0 ;
-        for( int i=11 ; i < L ; i++ ) {
+        for( int i=LPF_TAPS-1 ; i < Lmax ; i++ ) {
                 double acc = 0 ;
                 for( int p=0 ; p < 11 ; p++ ) {
-                        acc += lpf[p] * psamples[i-p].re ;
+                        acc += lpf[p] * work[i-p].re ;
                 }
-                psamples[s++].re = acc ;
+                work[s++].re = acc ;
         }
+        if( false ) {
+           FILE *f = fopen( "demod.dat", "wb" );
+           fwrite( work, sizeof( TYPECPX), Lmax, f );
+           qDebug() << "writing debug files demod.dat with " << Lmax << " samples" ;
+           fclose( f );
+       }
 
         // search for silence between chirp and fsk sequence
         int start = 0 ;
-        while( (psamples[start].im > pmoy) && (start < L)) {
+        int L = 0 ;
+        // search up
+        while( (work[start].im < power_threshold) && (start < Lmax)) {
             start++ ;
         }
-        if( start == L ) return(NULL);
-        while( (psamples[start].im < pmoy) && (start < L)) {
+        // stay up
+        while( (work[start].im > power_threshold) && (start < Lmax)) {
             start++ ;
         }
-        if( start == L ) return(NULL);
+        if( start == Lmax ) {
+            qDebug() << "did not find down transition" ;
+            (*consumed) = Lmax/2 ;
+            return(NULL);
+        }
+        //qDebug() << "down transition at " << start ;
+        start += 10 ;
+        while( (work[start].im < power_threshold) && (start < Lmax)) {
+            start++ ;
+            L++ ;
+        }
+
+        if( (start == Lmax) || (L==0)) {
+           // qDebug() << "did not find up transition" ;
+            (*consumed) = Lmax/2 ;
+            return(NULL);
+        }
+
+        //qDebug() << "start decoded at " << start ;
 
 
-          if( false ) {
-             FILE *f = fopen( "demod.dat", "wb" );
-             fwrite( psamples, sizeof( TYPECPX), L, f );
-             fclose( f );
-         }
 
-         psamples += start ;
+         TYPECPX *position = work ;
+         position += start ;
          int len = 0 ;
          bool frame = false ;
          rxmsg[len] = (char)0 ;
          QByteArray deb ;
+         (*consumed) = start + LPF_TAPS ;
+
          while( symbol < s ) {
                 // demod FSK octet / octet
-                int v = demodByte( psamples, &symbol,L-start);
-
+                int v = demodByte( position, &symbol,Lmax-start);
                 if( v < 0 ) {
                       return(NULL);
                 }
                 deb.append((char)v);
-
+                //qDebug() << deb ;
                 if( !frame && (v==(int)'[')) {
                     frame = true ;
                     continue ;
                 }
-
-
                 if( frame ) {
                      if( v == (char)']')  {
                           frame = false ;
@@ -321,8 +402,11 @@ char*  UAVProcessor::demod( TYPECPX* psamples, int L ) {
                 }
          }
 
-         if( strlen(rxmsg) == 0 )
+         if( strlen(rxmsg) == 0 ) {
+             //qDebug() << "empty frame"  << deb ;
              return(NULL);
+         }
+         (*consumed) += (int)( (strlen(rxmsg) *10*m_bandwidth)/UAV_BITRATE );
          char *rx = (char *)malloc( strlen(rxmsg) * sizeof(char));
          strcpy( rx, rxmsg) ;
          return( rx );
@@ -412,9 +496,10 @@ int  UAVProcessor::calc( float *pvmax ) {
            (*pvmax) = vmax ;
       }
 
-      //qDebug() << "ratio:" << ratio ;
+     // qDebug() << "ratio:" << ratio << " vmax=" << vmax << " vmoy=" << vmoy << " threshold=" << detection_threshold;
      emit detectionLevel(ratio);
       if( ratio < detection_threshold ) {
+          //qDebug() << "ratio < detection_threshold  " << ratio << " vmax=" << vmax << " vmoy=" << vmoy << " threshold=" << detection_threshold;
           return(-1);
        }
 

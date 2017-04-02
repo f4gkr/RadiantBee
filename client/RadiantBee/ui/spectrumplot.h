@@ -60,8 +60,8 @@ public:
      void razMaxHold();
      void setShowPeak( bool show ) { show_peak = show ; }
 
-     float getMinScale() { return( min_scale ); }
-     float getMaxScale() { return( max_scale ); }
+     double getMinScale() { return( min_scale ); }
+     double getMaxScale() { return( max_scale ); }
 
 signals:
      void NewDemodFreq(qint64 freq, qint64 delta);

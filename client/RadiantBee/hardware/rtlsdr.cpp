@@ -33,6 +33,7 @@
 #include <QDebug>
 
 void* acquisition_thread( void *params ) ;
+bool RTLSDR::m_stop ;
 
 RTLSDR::RTLSDR( int select_index)
 {
@@ -171,6 +172,7 @@ RTLSDR::RTLSDR( int select_index)
 
 
 int RTLSDR::setRxCenterFreq(uint64_t freq_hz ) {
+    qDebug() << "RTLSDR::setRxCenterFreq: " << freq_hz / 1e6 ;
     int rc = rtlsdr_set_center_freq( rtlsdr_device, freq_hz  );
     if( !rc ) {
         this->freq_hz = freq_hz ;
@@ -236,7 +238,7 @@ int RTLSDR::startAcquisition() {
          qDebug() << "ERROR:RTLSDR::startAcquisition() rtlsdr_reset_buffer" ;
         return(0);
     }
-    qDebug() << "ERROR:RTLSDR::startAcquisition() sem_post" ;
+    qDebug() << "RTLSDR::startAcquisition() sem_post" ;
     sem_post(&mutex);
     return(1);
 }
@@ -322,8 +324,12 @@ void* acquisition_thread( void *params ) {
     qDebug() << "acquisition_thread() starting" ;
     for( ; ; ) {
         sem_wait( &dev->mutex );
+        if(RTLSDR:: m_stop )
+            break ;
         qDebug() << "acquisition_thread() got mutex, start SDR" ;
         rtlsdr_read_async(rtlsdr_device, dev->rtlsdr_callback, (void *)dev, 0, 65536);
+        if( RTLSDR::m_stop )
+            break ;
     }
     return(NULL);
 }
@@ -331,6 +337,8 @@ void* acquisition_thread( void *params ) {
 void RTLSDR::close() {
     if( rtlsdr_device != NULL ) {
         stopAcquisition();
+        m_stop = true ;
+        sem_post(&mutex);
         qDebug() << "closing SDR device" ;
         rtlsdr_close(rtlsdr_device);
 

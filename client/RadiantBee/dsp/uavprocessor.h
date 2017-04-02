@@ -57,6 +57,11 @@ signals:
 public slots:
 
 private:
+     enum  { sInit=0 , sSearch=1,sChirpFound=2,sDecodeFSK,sMeasureNoise } ;
+     int m_state, next_state ;
+     float signal_plus_noise, noise_only ;
+     QString lastFrameReceived ;
+
     TYPECPX *samples ;
     int m_bandwidth ;
     int chirp_length ;
@@ -74,8 +79,10 @@ private:
 
     void generate(TYPEREAL bandwidth , TYPEREAL sampleRate, long length);
     int calc(float *pvmax);
-    char *demod(TYPECPX* psamples , int L);
+    char *demod(TYPECPX* psamples , int Lmax, int *consumed );
     int demodByte(TYPECPX* psamples, int *pstart, int L );
+
+    QString stateToS(int s);
 };
 
 #endif // UAVPROCESSOR_H

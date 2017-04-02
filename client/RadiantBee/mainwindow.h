@@ -88,14 +88,16 @@ public slots:
 
 private slots:
     void SLOT_userTunesFreqWidget(qint64 newFrequency);
-    void SLOT_newSpectrum(int len  );
+    void SLOT_newSpectrum(int len  , double smin, double smax);
     void SLOT_startPressed();
+    void SLOT_stopPressed();
 
     void SLOT_setRxGain(int) ;
     void SLOT_setDetectionThreshold(int);
 
 private:
     int received_frame ;
+    int msg_count ;
      SpectrumSegment *seg_rx ;
      CFreqCtrl *mainFDisplay ;
      gkDial *gain_rx ;

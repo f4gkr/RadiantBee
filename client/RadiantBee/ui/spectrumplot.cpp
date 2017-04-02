@@ -285,12 +285,11 @@ void SpectrumPlot::setPowerTab(qint64 center_frequency, double *power_dB, int le
              pow_min = spectrum[i] ;
          }
 
-
          if( spectrum[i] > max_hold[i]) {
              max_hold[i] = (9*max_hold[i] + spectrum[i])/10.0;
          } else {
              if( max_hold[i] > -200 ) {
-                 max_hold[i] -= 1 ;
+                 max_hold[i] -= .1 ;
              }
          }
      }

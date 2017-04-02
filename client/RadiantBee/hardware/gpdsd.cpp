@@ -177,7 +177,7 @@ void GPSD::SLOT_timer() {
 }
 
 void GPSD::shutdown() {
-    m_stop = false ;
+    m_stop = true ;
 }
 
 void GPSD::run() {
@@ -258,7 +258,6 @@ void GPSD::run() {
                         longitude = new_longitude ;
                         if( altitude_valid)
                                 altitude = new_altitude ;
-
 
 
                         if( altitude_valid &&  ((abs(dlat)<1e-5) || (abs(dlon)<1e-5) || (abs(dalt)<5) )) {
@@ -381,5 +380,5 @@ void GPSD::run() {
     }
     gps_close(&gps_data);
 #endif
-
+    qDebug() << "GPSD thread ending" ;
 }
