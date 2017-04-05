@@ -115,7 +115,7 @@ private:
     Controller();
     Controller(const Controller &); // hide copy constructor
     Controller& operator=(const Controller &);
-
+    int year, month, day, hour, min, sec, msec ;
     void run();
     void process( TYPECPX*samples, int L );
     void generateSpectrum( TYPECPX *samples );

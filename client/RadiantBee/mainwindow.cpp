@@ -219,9 +219,23 @@ MainWindow::MainWindow(QWidget *parent)
     detection_plot->xAxis->setLabel(tr("Frame"));
     detection_plot->yAxis->setLabel("SNR");
     detection_plot->xAxis->setRange(0, 1);
-    detection_plot->yAxis->setRange(10, 70);
-    detection_plot->setMinimumHeight(200);
+    detection_plot->yAxis->setRange(0, 70);
+    detection_plot->setMinimumHeight(150);
     pwlayout->addWidget( detection_plot );
+
+    levelplot = new QCustomPlot();
+    levelplot->addGraph();
+    levelplot->xAxis->setLabel(tr("Frame"));
+    levelplot->yAxis->setLabel("Level");
+    levelplot->xAxis->setRange(0, 1);
+    levelplot->yAxis->setRange(-70, -10);
+    levelplot->setMinimumHeight(150);
+    levelplot->addGraph();
+    levelplot->graph(1)->setPen(QPen(Qt::red));
+    min_level = 0 ;
+    max_level = -100 ;
+
+    pwlayout->addWidget( levelplot );
 
     vlayout->addWidget( plotWidget );
 
@@ -281,7 +295,7 @@ void MainWindow::SLOT_userTunesFreqWidget(qint64 newFrequency) {
 
 // start SDR pressed
 void MainWindow::SLOT_startPressed() {
-   qint64 newFrequency = 439795000 ;
+   qint64 newFrequency = 144832000 - 55000 ; //439795000 ;
    Controller& ctrl = Controller::getInstance() ;
 
     if( radio == NULL )
@@ -362,7 +376,7 @@ MainWindow::~MainWindow()
 }
 
 void MainWindow::SLOT_detectionLevel( float level )  {
-    qDebug() << "level=" << level ;
+    //qDebug() << "level=" << level ;
     levelWidget->setValue( level );    
     detection_plot->graph(0)->addData( msg_count/10.0, level);
     detection_plot->xAxis->setRange( msg_count/10.0,60,Qt::AlignRight );
@@ -376,9 +390,19 @@ void MainWindow::SLOT_frameDetected(  float signal_level, float noise_level, QSt
                                        float elevation, float azimuth, float distance,
                                        float uav_roll, float uav_pitch, float uav_yaw
                                       )  {
-//    detection_plot->graph(0)->addData( received_frame, -1*signal_level );
-//    detection_plot->xAxis->setRange( received_frame,60,Qt::AlignRight );
-//    detection_plot->replot();
+
+    if( qMin(signal_level, noise_level) < min_level ) {
+         min_level = qMin(signal_level, noise_level) ;
+    }
+    if( qMax(signal_level, noise_level) > max_level ) {
+         max_level = qMax(signal_level, noise_level) ;
+    }
+
+    levelplot->graph(0)->addData( received_frame/10,  signal_level );
+    levelplot->graph(1)->addData( received_frame/10,  noise_level );
+    levelplot->xAxis->setRange( received_frame/10.0,60,Qt::AlignRight );
+    levelplot->yAxis->setRange(min_level,max_level);
+    levelplot->replot();
     received_frame++ ;
 
     uavLatitude->setText(QString::number( uavlatitude, 'f', 8));

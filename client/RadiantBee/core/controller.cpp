@@ -201,11 +201,8 @@ void Controller::process( TYPECPX*samples, int L ) {
     }
 
     while( left > 0 ) {
-
         int qty = qMin(left, (int)STEP_SIZE) ;
-        // qDebug() << "put [";
         rc = channelizer->put(pt, qty) ;
-        // qDebug() << "]";
         if( rc < 0 ) {
             break ;
         }
@@ -220,7 +217,6 @@ void Controller::process( TYPECPX*samples, int L ) {
             }
         }
     }
-
 
     free(samples);
     return ;
@@ -279,11 +275,7 @@ void Controller::SLOT_detectionLevel( float level )  {
 }
 
 void Controller::SLOT_frameDetected(float signal_level, float noise_level, QString message )  {
-    qDebug() << "signal_level:" << signal_level ;
-    qDebug() << "message : " << message ;
-
-
-    if( message.length() < 5 )
+      if( message.length() < 5 )
         return ;
 
     // parse frame
@@ -328,6 +320,7 @@ void Controller::SLOT_frameDetected(float signal_level, float noise_level, QStri
 
     FILE *rbee_log = fopen(  "rbee.dat", "a");
     if( rbee_log != NULL ) {
+        fprintf(rbee_log,"%02d/%02d/%d %02d:%02d:%02d.%03d;" , day,month,year,hour,min,sec,msec);
         fprintf( rbee_log, "%ld;%f;%f;", frameid, signal_level, noise_level );
         fprintf( rbee_log, "%01.7f;%01.7f;%f;", longitude, latitude, (float)(altitude/10.0) );
         fprintf( rbee_log, "%01.7f;%01.7f;%f;", m_Longitude, m_Latitude, m_Altitude );
@@ -347,7 +340,13 @@ void Controller::SLOT_hasGpsFix(double latitude, double longitude, double altitu
 }
 
 void Controller::SLOT_hasGpsTime(int year, int month, int day, int hour, int min, int sec, int msec) {
-
+    this->year = year ;
+    this->month = month ;
+    this->day = day ;
+    this->hour = hour ;
+    this->min = min ;
+    this->sec = sec ;
+    this->msec = msec ;
 }
 
 static float radians(float angle) { return( angle/180*3.14159265358979323846) ; }

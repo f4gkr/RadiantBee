@@ -121,9 +121,12 @@ private:
 
      RTLSDR* radio ;
      SpectrumPlot *plot ;
+
      IndicatorWidget *levelWidget ;
      QCustomPlot *detection_plot ;
-
+     QCustomPlot *levelplot ;
+     float min_level ;
+     float max_level ;
 };
 
 #endif // MAINWINDOW_H

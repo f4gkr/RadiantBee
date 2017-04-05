@@ -197,11 +197,12 @@ void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
             if( msg_wrpos < fft_length )  {
                 continue ;
             }
-            memcpy( (void *)fftin, (void *)samples, fft_length*sizeof(TYPECPX));
-            for( k=chirp_length+100; k < fft_length ; k++ ) {
-                fftin[k][0] = fftin[k][1] = 0 ;
+            signal_plus_noise = rmsp( samples, chirp_length );
+            if( true ) {
+                FILE *f = fopen( "signal_plus_noise.dat", "wb" );
+                fwrite( samples, sizeof( TYPECPX), chirp_length, f );
+                fclose( f );
             }
-            p = calc(&signal_plus_noise);
             // discard and shift left by chirp_length samples - one bit @UAV_BITRATE
             k = (int)(.8 * chirp_length) ; // - 10*m_bandwidth/UAV_BITRATE ;
             memmove( (void *)samples, (void *)&samples [k] ,(msg_length - k)*sizeof(TYPECPX));
@@ -223,7 +224,6 @@ void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
             }
 
             if( msg == NULL ) {
-                 //qDebug() << "UAVProcessor::newData : " << stateToS( m_state ) << " msg not found k=" << k;
                 next_state = sSearch ;
                 continue ;
             }
@@ -236,11 +236,7 @@ void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
             if( msg_wrpos <chirp_length )  {
                 continue ;
             }
-            memcpy( (void *)fftin, (void *)samples, chirp_length*sizeof(TYPECPX));
-            for( k=chirp_length; k < fft_length ; k++ ) {
-                fftin[k][0] = fftin[k][1] = 0 ;
-            }
-            calc(&noise_only);
+             noise_only = rmsp( samples+5000, chirp_length/2 );
             v = 20*log10( signal_plus_noise - noise_only ) ;
             emit frameDetected( v, 20*log10(noise_only),lastFrameReceived);
             memmove( (void *)samples, (void *)&samples [chirp_length] ,(msg_length - chirp_length)*sizeof(TYPECPX));
@@ -250,6 +246,17 @@ void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
         }
     }
 
+}
+
+float UAVProcessor::rmsp( TYPECPX *samples, int L ) {
+      float res = 0 ;
+      int k = 0 ;
+      for( k=0 ; k < L ; k++ ) {
+              res += samples[k].re*samples[k].re + samples[k].im*samples[k].im ;
+      }
+      res = sqrtf( 1.0/L * res );
+      qDebug() << "rmsp = " << res ;
+      return(res);
 }
 
 //Normalize to [-180,180):
@@ -404,7 +411,9 @@ char*  UAVProcessor::demod(TYPECPX* psamples, int Lmax , int *consumed) {
              //qDebug() << "empty frame"  << deb ;
              return(NULL);
          }
-         (*consumed) += (int)( (strlen(rxmsg) *10*m_bandwidth)/UAV_BITRATE );
+
+         //(*consumed) += (int)( (strlen(rxmsg) *10*m_bandwidth)/UAV_BITRATE );
+         (*consumed) = symbol  + (10*m_bandwidth)/UAV_BITRATE;
          char *rx = (char *)malloc( strlen(rxmsg) * sizeof(char));
          strcpy( rx, rxmsg) ;
          return( rx );
@@ -447,7 +456,7 @@ int UAVProcessor::demodByte( TYPECPX* psamples, int *pstart, int L ) {
     return(v);
 }
 
-int  UAVProcessor::calc( float *pvmax ) {
+int  UAVProcessor::calc( float *pvmax  ) {
      int i ;
      float vmax = -9999 ;
      int pmax = -1 ;
@@ -489,6 +498,7 @@ int  UAVProcessor::calc( float *pvmax ) {
             }
       }
       vmoy /= fft_length ;
+
       float ratio =  20*log10( vmax/vmoy + 1e-9) ;
       if( pvmax != NULL ) {
            (*pvmax) = vmax ;
@@ -500,6 +510,7 @@ int  UAVProcessor::calc( float *pvmax ) {
           //qDebug() << "ratio < detection_threshold  " << ratio << " vmax=" << vmax << " vmoy=" << vmoy << " threshold=" << detection_threshold;
           return(-1);
        }
+
 
       return(pmax);
 }

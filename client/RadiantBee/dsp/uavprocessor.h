@@ -82,6 +82,8 @@ private:
     char *demod(TYPECPX* psamples , int Lmax, int *consumed );
     int demodByte(TYPECPX* psamples, int *pstart, int L );
 
+    float rmsp( TYPECPX *samples, int L );
+
     QString stateToS(int s);
 };
 
