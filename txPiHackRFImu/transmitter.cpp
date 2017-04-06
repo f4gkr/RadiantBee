@@ -249,7 +249,7 @@ int Transmitter::tx_callback(unsigned char *buf, uint32_t len) {
     case stTxWait:
         modem->raz();
         sprintf(txmsg, "[%ld;%02.7f;%02.7f;%d;%d;%d;%d]", frame_no, lon, lat, alt,roll,pitch,yaw);
-        //printf("Ttx msg : %s\n", txmsg );
+        printf("Ttx msg : %s\n", txmsg );
         for( j=0 ; j < strlen(txmsg); j++ ) {
             modem->addChar( txmsg[j]);
         }

@@ -20,6 +20,7 @@ public:
     float readPressureMillibars(void);
 
     bool isReady() { return( ok ); }
+    void reset();
 
 private:
     uint8_t address;
@@ -27,6 +28,8 @@ private:
     bool detectAddress();
     bool testWhoAmI();
     I2CBus i2c;
+
+
 };
 
 #endif // LPS331_H

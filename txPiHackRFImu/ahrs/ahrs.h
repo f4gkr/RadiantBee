@@ -6,7 +6,7 @@
 #include "vector.h"
 #include "MinIMU9.h"
 #include "version.h"
-
+#include "lps331.h"
 typedef void fuse_function(quaternion& rotation, float dt, const vector& angular_velocity,
                   const vector& acceleration, const vector& magnetic_field);
 
@@ -21,11 +21,13 @@ public:
     int getPitch() { return( pitch) ; }
     int getYaw() { return( yaw) ; }
 
+    float getAltitude() { return( altitude ); }
 signals:
 
 public slots:
 private:
     IMU *imu ;
+    float altitude;
     fuse_function * fuse;
     int roll,pitch,yaw;
     static int millis();

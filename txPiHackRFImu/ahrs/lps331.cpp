@@ -38,9 +38,13 @@ LPS331::LPS331(const char *i2cDeviceName) : i2c(i2cDeviceName)
 
     ok = detectAddress();
     if( ok ) {
-        writeReg( 0x20, 0b10000100 );
-        writeReg( 0x21, 0b1);
+        reset();
     }
+}
+
+void LPS331::reset() {
+    writeReg( 0x20, 0b10000100 );
+    writeReg( 0x21, 0b1);
 }
 
 bool LPS331::detectAddress()
@@ -86,6 +90,8 @@ float LPS331::readPressureMillibars(void)
 // reads pressure and returns raw 24-bit sensor output
 long LPS331::readPressureRaw(void)
 {
+
+
     uint8_t data[4];
     data[0] = readReg(0x28) ;
     data[1] = readReg(0x29) ;

@@ -15,18 +15,29 @@ AHRS::AHRS(QObject *parent) :
     imu = new MinIMU9( (const char *)"/dev/i2c-1");
     fuse = &fuse_default ;
     roll = pitch = yaw = 0 ;
+    altitude = 0 ;
 }
 
 void AHRS::run() {
-
+    int cycles ;
     imu->loadCalibration();
     imu->enable();
     imu->measureOffsets();
 
+    LPS331 baro((const char *)"/dev/i2c-1") ;
+    if( baro.isReady() ) {
+        qDebug() << "Temperature:" << baro.readTemperatureC();
+        qDebug() << " Pression" << baro.readPressureMillibars();
+    }
+    float temperature = baro.readTemperatureC();
+    float pressure = baro.readPressureMillibars() ;
+    altitude = baro.pressureToAltitudeMeters(pressure) ;
+    qDebug() << "temperature:" << temperature << "pressure:" << pressure << " alt=" << altitude ;
+
     // The quaternion that can convert a vector in body coordinates
     // to ground coordinates when it its changed to a matrix.
     quaternion rotation = quaternion::Identity();
-
+    cycles = 0 ;
     int start = millis(); // truncate 64-bit return value
     while(1)
     {
@@ -46,11 +57,23 @@ void AHRS::run() {
         pitch = roundf(v(1));
         yaw = roundf(v(2));
 
+        cycles++ ;
+        if( cycles > 50 ) {
+            // measure baro every second
+            baro.reset();
+            temperature = baro.readTemperatureC();
+            pressure = baro.readPressureMillibars() ;
+            altitude = baro.pressureToAltitudeMeters(pressure) ;
+            qDebug() << "temperature:" << temperature << "pressure:" << pressure << " alt=" << altitude ;
+            cycles = 0 ;
+        }
+
         // Ensure that each iteration of the loop takes at least 20 ms.
         while(millis() - start < 20)
         {
             usleep(1000);
         }
+
     }
 }
 

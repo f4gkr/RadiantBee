@@ -57,13 +57,12 @@ int main(int argc, char *argv[])
     bool gps_ok = false ;
     struct gps_data_t gps_data;
     int rc ;
+    char tbuf[128];
+    int gps_hour, gps_min, gps_sec  ;
+    int gps_day, gps_month, gps_year ;
 
     AHRS ahrs ;
-    LPS331 baro((const char *)"/dev/i2c-1") ;
-    if( baro.isReady() ) {
-        qDebug() << "Temperature:" << baro.readTemperatureC();
-        qDebug() << " Pression" << baro.readPressureMillibars();
-    }
+
 
 
     Chirp *c = new Chirp(100e3,HACKRF_SR,duree_chirp,3*duree_chirp,true);
@@ -120,12 +119,12 @@ int main(int argc, char *argv[])
 
                         lat = gps_data.fix.latitude ;
                         lon = gps_data.fix.longitude ;
+                        unix_to_iso8601(gps_data.fix.time, tbuf, sizeof(tbuf));
+                        sscanf(tbuf, "%d-%d-%dT%d:%d:%d", &gps_year, &gps_month, &gps_day,&gps_hour,&gps_min,&gps_sec);
+                        printf("GPS time: %02d/%02d/%d - %02d:%02d:%02d\n", gps_day, gps_month, gps_year, gps_hour, gps_min, gps_sec);
 
                 }
-                float temperature = baro.readTemperatureC();
-                float pressure = baro.readPressureMillibars() ;
-                alt = baro.pressureToAltitudeMeters(pressure) ;
-                qDebug() << "temperatuer:" << temperature << "pressure:" << pressure << " alt=" << alt ;
+                alt = ahrs.getAltitude() ;
                 tx->setTelemetryData( lat, lon, (int)(alt*10), ahrs.getRoll(),ahrs.getPitch(),ahrs.getYaw());
                 printf("Set position: %0.8f,%0.8f,%0.1f,%d,%d,%d\n", lat,lon,alt, ahrs.getRoll(),ahrs.getPitch(),ahrs.getYaw());
             }
