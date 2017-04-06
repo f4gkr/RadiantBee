@@ -23,7 +23,8 @@ SOURCES += main.cpp\
     ahrs/I2CBus.cpp \
     ahrs/L3G.cpp \
     ahrs/LSM303.cpp \
-    ahrs/MinIMU9.cpp
+    ahrs/MinIMU9.cpp \
+    ahrs/lps331.cpp
 
 HEADERS  += mainwindow.h \
     chirp.h \
@@ -39,5 +40,6 @@ HEADERS  += mainwindow.h \
     ahrs/LSM303.h \
     ahrs/MinIMU9.h \
     ahrs/vector.h \
-    ahrs/version.h
+    ahrs/version.h \
+    ahrs/lps331.h
 

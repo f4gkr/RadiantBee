@@ -4,6 +4,7 @@
 #include "IMU.h"
 #include "LSM303.h"
 #include "L3G.h"
+#include "lps331.h"
 
 class MinIMU9 : public IMU {
 public:

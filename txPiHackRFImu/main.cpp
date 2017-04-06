@@ -28,6 +28,7 @@
 //==========================================================================================
 #include "mainwindow.h"
 #include <QApplication>
+#include <QDebug>
 #include <iostream>
 #include <unistd.h>
 #include <stdio.h>
@@ -41,6 +42,7 @@
 #include "chirp.h"
 #include "fsk.h"
 #include "ahrs/ahrs.h"
+#include "ahrs/lps331.h"
 
 #define HACKRF_SR (4000000)
 
@@ -57,6 +59,11 @@ int main(int argc, char *argv[])
     int rc ;
 
     AHRS ahrs ;
+    LPS331 baro((const char *)"/dev/i2c-1") ;
+    if( baro.isReady() ) {
+        qDebug() << "Temperature:" << baro.readTemperatureC();
+        qDebug() << " Pression" << baro.readPressureMillibars();
+    }
 
 
     Chirp *c = new Chirp(100e3,HACKRF_SR,duree_chirp,3*duree_chirp,true);
@@ -68,7 +75,7 @@ int main(int argc, char *argv[])
         return(-1);
     }
 
-    if( tx->setTxCenterFreq( 439.900e6 ) == 0 ) {
+    if( tx->setTxCenterFreq( 868.80e6 ) == 0 ) { //439.9
         std::cout << "frequency set error\n" ;
         return(-2);
     }
@@ -110,16 +117,15 @@ int main(int argc, char *argv[])
                     continue ;
                 }
                 if ((gps_data.fix.mode == MODE_2D) || (gps_data.fix.mode == MODE_3D) ) {
-                    float dlat = lat - gps_data.fix.latitude ;
-                    float dlon = lon - gps_data.fix.longitude ;
-                    float dalt = alt - gps_data.fix.altitude ;
 
-                    if( (fabs(dlat)>1e-4) || (fabs(dlon)>1e-4) || (fabs(dalt)>1)) {
                         lat = gps_data.fix.latitude ;
                         lon = gps_data.fix.longitude ;
-                        alt = gps_data.fix.altitude ;                                                
-                    }
+
                 }
+                float temperature = baro.readTemperatureC();
+                float pressure = baro.readPressureMillibars() ;
+                alt = baro.pressureToAltitudeMeters(pressure) ;
+                qDebug() << "temperatuer:" << temperature << "pressure:" << pressure << " alt=" << alt ;
                 tx->setTelemetryData( lat, lon, (int)(alt*10), ahrs.getRoll(),ahrs.getPitch(),ahrs.getYaw());
                 printf("Set position: %0.8f,%0.8f,%0.1f,%d,%d,%d\n", lat,lon,alt, ahrs.getRoll(),ahrs.getPitch(),ahrs.getYaw());
             }

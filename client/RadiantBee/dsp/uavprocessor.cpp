@@ -198,7 +198,7 @@ void UAVProcessor::newData( TYPECPX* IQsamples, int L , int sampleRate ) {
                 continue ;
             }
             signal_plus_noise = rmsp( samples, chirp_length );
-            if( true ) {
+            if( false ) {
                 FILE *f = fopen( "signal_plus_noise.dat", "wb" );
                 fwrite( samples, sizeof( TYPECPX), chirp_length, f );
                 fclose( f );
